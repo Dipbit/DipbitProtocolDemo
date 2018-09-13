@@ -7,9 +7,19 @@
 package com.dipbit.model;
 
 
+/**
+ * sending or receiving
+ * 
+ */
 public enum Direction implements org.apache.thrift.TEnum {
-  IN(0),
-  OUT(1);
+  /**
+   * for and address sending digital crypto currency OUT should be used
+   */
+  SEND(0),
+  /**
+   * for and address receiving digital crypto currency IN should be used
+   */
+  RECEIVE(1);
 
   private final int value;
 
@@ -31,9 +41,9 @@ public enum Direction implements org.apache.thrift.TEnum {
   public static Direction findByValue(int value) { 
     switch (value) {
       case 0:
-        return IN;
+        return SEND;
       case 1:
-        return OUT;
+        return RECEIVE;
       default:
         return null;
     }

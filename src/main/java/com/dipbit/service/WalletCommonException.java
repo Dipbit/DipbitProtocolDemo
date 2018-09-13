@@ -23,7 +23,12 @@ public enum WalletCommonException implements org.apache.thrift.TEnum {
   /**
    * invalid address or memo
    */
-  INVALID_ADDRESS(3);
+  INVALID_ADDRESS(3),
+  /**
+   * create address fail
+   */
+  CREATE_ADDRESS_FAIL(4),
+  UNSUPPORTED_OPERATION(5);
 
   private final int value;
 
@@ -52,6 +57,10 @@ public enum WalletCommonException implements org.apache.thrift.TEnum {
         return SENT_UNKNOWN_RESULT;
       case 3:
         return INVALID_ADDRESS;
+      case 4:
+        return CREATE_ADDRESS_FAIL;
+      case 5:
+        return UNSUPPORTED_OPERATION;
       default:
         return null;
     }

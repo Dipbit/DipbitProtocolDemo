@@ -45,9 +45,14 @@ enum TransactionStatus{
     UNKNOWN=5
 }
 
+/**
+*  sending or receiving
+**/
 enum Direction{
-    IN=0,
-    OUT=1,
+    /** for and address sending digital crypto currency OUT should be used*/
+    SEND=0,
+    /** for and address receiving digital crypto currency IN should be used*/
+    RECEIVE=1,
 }
 
 enum MemoType{
@@ -71,64 +76,119 @@ struct SendRequest{
     5:optional map<string,string> properties,
 }
 
+/***
+* some wallet configuration
+**/
 struct CoinChannel{
+    /** unique ID for the wallet deployment*/
     1:string id,
+    /** the alias name of the unique ID*/
     2:string name,
+    /** the code of crypto currency, like ETH, BTC*/
     3:string currency,
-    4:i32 status,
+    /** the rpc URL of the wallet*/
+    4:string rpcURL,
+    /** the rpc protocol of the wallet*/
     5:string rpcProtocol,
-    6:string rpcURL,
-    7:string rpcPort,
-    8:optional string rpcPassword,
-    9:optional string rpcUser,
-    10:optional string config,
-    11:optional string extra
+    /** the rpc port of the wallet*/
+    6:i32 rpcPort,
+    /** the rpc password of the wallet*/
+    7:optional string rpcPassword,
+    /** the rpc usser of the wallet */
+    8:optional string rpcUser,
+    /** other configuration of the walet, this will be a json string*/
+    9:optional string config,
+    /*** reserved extra configuration, normally this should not be used */
+    10:optional string extra
 }
 
+/***
+*  parameters when create a transaction
+**/
 struct TransactionParam{
+    /** transaction items*/
     1:list<TransactionIO> ioList,
+    /** ID of CoinChannel*/
     2:string channelId,
     /** when building the transaction, if you need to change to address */
     3:optional Address changeAddress,
+    /** extra properties, normally this will be empty for reserved usage*/
     4:optional map<string,string> properties
 }
 
+/**
+* the transaction item of an address sending or receiving digital crypto currency
+**/
 struct TransactionIO{
+    /** the address sending or receiving digital crypto currency*/
     1:string address,
+    /** the transaction memo*/
     2:optional string memo,
+    /** the amount need to be transfered*/
     3:BigDecimal amount,
+    /** sending or receiving*/
     4:Direction direction,
 }
 
+/***
+* the raw information returned by wallet after sending a transaction.
+**/
 struct ChainTransaction{
+    /** transaction mode */
     1:Category category,
+    /** transaction id */
     2:string txId,
+    /** currency name, for example ETC,BTH*/
     3:string currency,
+    /** transaction status*/
     4:TransactionStatus status,
+    /** transaction fee*/
     5:BigDecimal fee,
+    /** confirmation number*/
     6:i32 confirmations,
+    /** block hash of the block containing this transaction */
     7:string blockHash,
+    /** block index of the block containing this transaction */
     8:optional string blockIndex,
+    /** block time of the block generated*/
     9:i64 blockTime,
+    /** the time when the wallet receiving the block*/
     10:i64 receiveTime,
+    /** the raw block chain information*/
     11:optional string txResult,
+    /** transaction sending or receiving items */
     12:list<TransactionIO> ioList,
+    /** reserved for furthur usage, other propeties */
     13:optional map<string,string> properties,
 }
 
+/**
+*  the public address
+**/
 struct Address{
+    /** the public address on the block chain*/
     1:string address,
+    /** memo of the address*/
     2:optional string memo,
-    3:optional string account,
+    /** account name of the address*/
+    3:string account,
+    /** memo type, some wallet only use one address and use generated increment id for different account or user*/
     4:MemoType memoType = MemoType.DEFAULT
 }
 
+/** big decimal is a alias of string the format should be 'xx.xxx' */
 typedef string BigDecimal
 
-
+/***
+* parameters of the query operation
+**/
 struct QueryParam{
+    /** the stat time of block received*/
     1:i64 startReceiveTime,
+    /** the end time of block received*/
     2:i64 endReceiveTime,
+    /** the start block hash*/
     3:optional string startBlockHash,
+    /** the start block index*/
     4:optional string startBlockIndex
 }

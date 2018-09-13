@@ -28,7 +28,7 @@ public class BTCTransactionServiceImpl implements TransactionSerivce.Iface {
     static Logger logger = LoggerFactory.getLogger(BTCTransactionServiceImpl.class);
 
     static BitcoinJSONRPCClient getClient(CoinChannel channel) throws TException {
-        String URL = channel.getRpcProtocol() + "://" + channel.getRpcUser() + ":" + channel.getRpcPassword() + "@" + channel.getRpcURL();
+        String URL = channel.getRpcProtocol() + "://" + channel.getRpcUser() + ":" + channel.getRpcPassword() + "@" + channel.getRpcURL() + ":" + channel.getRpcPort() + "/";
         try {
             return new BitcoinJSONRPCClient(URL);
         } catch (MalformedURLException e) {
@@ -36,11 +36,10 @@ public class BTCTransactionServiceImpl implements TransactionSerivce.Iface {
             throw new TException(e);
         }
 
-
     }
 
     @Override
-    public SendRequest create(CoinChannel channel, TransactionParam param) throws TException {
+    public SendRequest create(CoinChannel channel, TransactionParam param) throws WalletException, TException {
 
         try {
             BigDecimal fee = BigDecimal.valueOf(0.0001);//inner calculate
@@ -50,7 +49,7 @@ public class BTCTransactionServiceImpl implements TransactionSerivce.Iface {
             List<Bitcoin.TxOutput> outputList = new ArrayList<>();
 
             for (TransactionIO io : param.getIoList()) {
-                if (io.getDirection().equals(Direction.OUT)) {
+                if (io.getDirection().equals(Direction.SEND)) {
                     unspentAddresses.add(io.getAddress());
                 } else {
                     outAmount = outAmount.add(new BigDecimal(io.getAmount()));
@@ -88,7 +87,7 @@ public class BTCTransactionServiceImpl implements TransactionSerivce.Iface {
                 TransactionIO changeIn = new TransactionIO();
                 changeIn.setAddress(param.getChangeAddress().getAddress());
                 changeIn.setAmount(changeAmount.toString());
-                changeIn.setDirection(Direction.IN);
+                changeIn.setDirection(Direction.RECEIVE);
 
             }
             String rawHex = getClient(channel).createRawTransaction(inputList, outputList);
@@ -112,7 +111,7 @@ public class BTCTransactionServiceImpl implements TransactionSerivce.Iface {
     }
 
     @Override
-    public ChainTransaction send(CoinChannel channel, SendRequest request) throws TException {
+    public ChainTransaction send(CoinChannel channel, SendRequest request) throws WalletException, TException {
         try {
             String txId = getClient(channel).sendRawTransaction(request.getProperties().get("signHex"));
             ChainTransaction chainTransaction = new ChainTransaction();
@@ -130,17 +129,9 @@ public class BTCTransactionServiceImpl implements TransactionSerivce.Iface {
     }
 
     @Override
-    public ChainTransaction queryTransaction(CoinChannel channel, String txId) throws TException {
+    public ChainTransaction queryTransaction(CoinChannel channel, String txId) throws WalletException, TException {
         try {
-            Bitcoin.RawTransaction rawTx = getClient(channel).getTransaction(txId);
-            ChainTransaction chainTransaction = new ChainTransaction();
-            chainTransaction.setConfirmations(rawTx.confirmations());
-            chainTransaction.setReceiveTime(rawTx.timeReceived().getTime());
-            chainTransaction.setBlockHash(rawTx.blockHash());
-            chainTransaction.setBlockTime(rawTx.blockTime().getTime());
-            chainTransaction.setBlockIndex(String.valueOf(rawTx.blockIndex()));
-            chainTransaction.setFee(null == rawTx.fee() ? BigDecimal.ZERO.toString() : rawTx.fee().abs().toString());
-            return chainTransaction;
+            return parseChainTransactionFromWallet(channel, txId);
         } catch (Exception e) {
             logger.error("query fail, channel:{}, txId:{}", channel.id, txId, e);
             throw new TException(e.getCause());
@@ -148,12 +139,23 @@ public class BTCTransactionServiceImpl implements TransactionSerivce.Iface {
     }
 
     @Override
-    public List<ChainTransaction> queryTransactions(CoinChannel channel, QueryParam queryParam) throws TException {
-        return null;
+    public List<ChainTransaction> queryTransactions(CoinChannel channel, QueryParam queryParam) throws WalletException, TException {
+        List<ChainTransaction> ctList = new ArrayList<>();
+        try {
+            boolean queryEnd = false;
+            long lastBlockTime = queryParam.getEndReceiveTime();
+            Bitcoin.Block block = getClient(channel).getBlock(queryParam.startBlockHash);
+            while (!queryEnd && block != null && block.time().getTime() >= queryParam.getStartReceiveTime() && lastBlockTime <= queryParam.getEndReceiveTime()){
+                //TODO parse block.tx
+            }
+        } catch (BitcoinException e) {
+            e.printStackTrace();
+        }
+        return ctList;
     }
 
     @Override
-    public Map<Address, String> getBalance(CoinChannel channel, List<Address> accounts) throws TException {
+    public Map<Address, String> getBalance(CoinChannel channel, List<Address> accounts) throws WalletException, TException {
         try {
             Map<Address, String> map = new HashMap<>();
             if (null != accounts && accounts.size() > 0) {
@@ -170,7 +172,7 @@ public class BTCTransactionServiceImpl implements TransactionSerivce.Iface {
     }
 
     @Override
-    public TransactionStatus confirmStatus(ChainTransaction chainTransaction, CoinChannel channel) throws TException {
+    public TransactionStatus confirmStatus(ChainTransaction chainTransaction, CoinChannel channel) throws WalletException, TException {
         if (chainTransaction.getConfirmations() >= 6) {
             return TransactionStatus.CONFIRMED;
         }
@@ -181,25 +183,29 @@ public class BTCTransactionServiceImpl implements TransactionSerivce.Iface {
     }
 
     @Override
-    public Address createAddress(CoinChannel channel, String account) throws TException {
+    public Address createAddress(CoinChannel channel, String account) throws WalletException, TException {
+
+        String address;
         try {
-            String address = null;
             if (StringUtils.isNotBlank(account)) {
                 address = getClient(channel).getNewAddress(account);
             } else {
                 address = getClient(channel).getNewAddress();
             }
-            Address addr = new Address(address, MemoType.DEFAULT);
-            addr.setAccount(account);
-            return addr;
         } catch (Exception e) {
             logger.error("create address fail, channel:{}, account:{}", channel.id, account, e);
-            throw new TException(e.getCause());
+            WalletException e1 = new WalletException(WalletCommonException.CREATE_ADDRESS_FAIL.getValue(), e.getMessage());
+            e1.setStackTrace(e.getStackTrace());
+            throw e1;
         }
+        Address addr = new Address(address, account, MemoType.DEFAULT);
+        addr.setAccount(account);
+        return addr;
+
     }
 
     @Override
-    public Map<String, Address> batchCreateAddresses(CoinChannel channel, List<String> accounts) throws TException {
+    public Map<String, Address> batchCreateAddresses(CoinChannel channel, List<String> accounts) throws WalletException, TException {
         Map<String, Address> accountAddressMap = new HashMap<>();
         for (String account : accounts) {
             accountAddressMap.put(account, createAddress(channel, account));
@@ -208,7 +214,7 @@ public class BTCTransactionServiceImpl implements TransactionSerivce.Iface {
     }
 
     @Override
-    public boolean validateAddress(CoinChannel channel, Address address) throws TException {
+    public boolean validateAddress(CoinChannel channel, Address address) throws WalletException, TException {
         try {
             Bitcoin.AddressValidationResult result = getClient(channel).validateAddress(address.getAddress());
             return result.isValid();
@@ -228,9 +234,9 @@ public class BTCTransactionServiceImpl implements TransactionSerivce.Iface {
     }
 
     @Override
-    public ChainTransaction processTransaction(CoinChannel channel, Map<String, String> params) throws TException {
+    public ChainTransaction processTransaction(CoinChannel channel, Map<String, String> params) throws WalletException, TException {
         String txId = params.get("tx");
-        return null;
+        return parseChainTransactionFromWallet(channel, txId);
     }
 
 
@@ -276,7 +282,7 @@ public class BTCTransactionServiceImpl implements TransactionSerivce.Iface {
                 String address = out.scriptPubKey().addresses().get(0);
                 output.setAddress(address);
                 output.setAmount(out.value().toString());
-                output.setDirection(Direction.OUT);
+                output.setDirection(Direction.SEND);
                 boolean isNeedAdd = isNewTransactionIO(ioList, output);
                 if (isNeedAdd) {
                     ioList.add(output);
@@ -294,7 +300,7 @@ public class BTCTransactionServiceImpl implements TransactionSerivce.Iface {
                                 String address = out.scriptPubKey().addresses().get(0);
                                 input.setAddress(address);
                                 input.setAmount(out.value().abs().toString());
-                                input.setDirection(Direction.IN);
+                                input.setDirection(Direction.RECEIVE);
                                 boolean isNeedAdd = isNewTransactionIO(ioList, input);
                                 if (isNeedAdd) {
                                     ioList.add(input);
